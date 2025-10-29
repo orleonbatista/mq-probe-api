@@ -18,6 +18,13 @@ management:
     export:
       prometheus:
         enabled: true
+      datadog:
+        enabled: false
+        api-key: ${DATADOG_API_KEY:}
+        uri: https://api.datadoghq.com
+  tracing:
+    sampling:
+      probability: 1.0
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
@@ -26,3 +33,9 @@ springdoc:
 logging:
   level:
     root: INFO
+
+mqprobe:
+  idempotency:
+    table-name: mq-probe-idempotency
+    region: us-east-1
+    record-ttl: PT24H
