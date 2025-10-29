@@ -5,16 +5,16 @@
 - A cada tarefa finalizada, marque a checkbox correspondente (`☐` → `✅`).
 - Ao concluir uma fase, adicione uma entrada resumida no `CHANGELOG` descrevendo a entrega.
 
-## ☐ Fase 0 — Fundação / Scaffold + DX
+## ✅ Fase 0 — Fundação / Scaffold + DX
 **Objetivo:** Criar o esqueleto da aplicação Java 17 com Spring Boot 3.x seguindo Clean Architecture + SOLID.
 
-- ☐ Configurar Gradle e plugin para Java 17.
-- ☐ Definir dependências iniciais (Spring Boot 3.x, validações, observabilidade).
-- ☐ Estruturar pacotes seguindo Clean Architecture + SOLID.
-- ☐ Implementar health endpoints básicos.
-- ☐ Configurar Swagger/OpenAPI funcional desde a fase inicial.
-- ☐ Habilitar logging em formato JSON.
-- ☐ Atualizar README com instruções básicas de execução e desenvolvimento.
+- ✅ Configurar Maven e plugin para Java 17.
+- ✅ Definir dependências iniciais (Spring Boot 3.x, validações, observabilidade).
+- ✅ Estruturar pacotes seguindo Clean Architecture + SOLID.
+- ✅ Implementar health endpoints básicos.
+- ✅ Configurar Swagger/OpenAPI funcional desde a fase inicial.
+- ✅ Habilitar logging em formato JSON.
+- ✅ Atualizar README com instruções básicas de execução e desenvolvimento.
 
 ## ☐ Fase 1 — Núcleo (Produce / Consume + Idempotência)
 **Objetivo:** Implementar os endpoints `POST /messages/produce` e `POST /messages/consume` com idempotência via DynamoDB.
