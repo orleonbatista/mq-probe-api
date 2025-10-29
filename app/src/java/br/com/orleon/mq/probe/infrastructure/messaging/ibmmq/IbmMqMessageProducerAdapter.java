@@ -5,21 +5,25 @@ import br.com.orleon.mq.probe.domain.model.message.MessageOperationResult;
 import br.com.orleon.mq.probe.domain.model.message.MessageOperationType;
 import br.com.orleon.mq.probe.domain.model.message.MessagePayload;
 import br.com.orleon.mq.probe.domain.model.message.ProduceMessageCommand;
-import br.com.orleon.mq.probe.domain.model.message.QueueEndpoint;
 import br.com.orleon.mq.probe.domain.ports.MessageProducerPort;
+import br.com.orleon.mq.probe.infrastructure.config.MqProperties;
 import com.ibm.mq.jms.MQQueueConnectionFactory;
 import com.ibm.msg.client.wmq.WMQConstants;
+import com.ibm.msg.client.wmq.common.CommonConstants;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.util.StringUtils;
+
 import javax.jms.BytesMessage;
 import javax.jms.DeliveryMode;
 import javax.jms.Destination;
 import javax.jms.JMSContext;
 import javax.jms.JMSException;
 import javax.jms.JMSProducer;
+import javax.jms.JMSRuntimeException;
 import javax.jms.Message;
 import javax.jms.TextMessage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,52 +35,70 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class IbmMqMessageProducerAdapter implements MessageProducerPort {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IbmMqMessageProducerAdapter.class);
+    private static final String TCP_KEEP_ALIVE_PROPERTY = "XMSC_WMQ_TCP_KEEP_ALIVE";
+
+    private final MqProperties properties;
+
+    public IbmMqMessageProducerAdapter(MqProperties properties) {
+        this.properties = properties;
+    }
 
     @Override
     public MessageOperationResult produce(ProduceMessageCommand command) {
+        properties.validate();
+
         Instant start = Instant.now();
         AtomicInteger processed = new AtomicInteger();
-        Exception lastException = null;
 
-        for (QueueEndpoint endpoint : command.queueManager().endpoints()) {
-            try {
-                MQQueueConnectionFactory factory = connectionFactory(command, endpoint);
-                try (JMSContext context = createContext(factory, command)) {
-                    Destination destination = context.createQueue("queue:///" + command.target().queueName());
-                    JMSProducer producer = context.createProducer();
-                    configureProducer(producer, command.settings());
-                    sendMessages(command, context, destination, producer, processed);
-                    Instant end = Instant.now();
-                    return buildResult(command, processed.get(), start, end);
-                }
-            } catch (Exception ex) {
-                lastException = ex;
-                LOGGER.error("Failed to produce messages using endpoint {}:{} for queue manager {}", endpoint.host(), endpoint.port(), command.queueManager().name(), ex);
+        MQQueueConnectionFactory factory = createConnectionFactory();
+        LOGGER.debug("Connecting to MQ: host={}, port={}, qm={}, channel={}, tls={}, cipherSuite={}",
+                properties.getHost(), properties.getPort(), properties.getQueueManager(), properties.getChannel(),
+                properties.isUseTLS(), properties.getCipherSuite());
+        try (JMSContext context = createContext(factory)) {
+            Destination destination = context.createQueue("queue:///" + command.target().queueName());
+            JMSProducer producer = context.createProducer();
+            configureProducer(producer, command.settings());
+            sendMessages(command, context, destination, producer, processed);
+            Instant end = Instant.now();
+            return buildResult(command, processed.get(), start, end);
+        } catch (JMSException | JMSRuntimeException ex) {
+            handleConnectionFailure(ex);
+            throw new MessageOperationException("Error connecting to MQ: " + ex.getMessage(), ex);
+        }
+    }
+
+    protected MQQueueConnectionFactory createConnectionFactory() {
+        try {
+            MQQueueConnectionFactory factory = new MQQueueConnectionFactory();
+            factory.setTransportType(WMQConstants.WMQ_CM_CLIENT);
+            factory.setHostName(properties.getHost());
+            factory.setPort(properties.getPort());
+            factory.setQueueManager(properties.getQueueManager());
+            factory.setChannel(properties.getChannel());
+            factory.setClientReconnectOptions(CommonConstants.WMQ_CLIENT_RECONNECT);
+            factory.setClientReconnectTimeout(30);
+            factory.setBooleanProperty(TCP_KEEP_ALIVE_PROPERTY, true);
+            if (properties.isUseTLS()) {
+                factory.setSSLCipherSuite(properties.getCipherSuite());
+                factory.setBooleanProperty(WMQConstants.USER_AUTHENTICATION_MQCSP, true);
             }
+            if (StringUtils.hasText(properties.getUsername())) {
+                factory.setStringProperty(WMQConstants.USERID, properties.getUsername());
+                factory.setStringProperty(WMQConstants.PASSWORD,
+                        properties.getPassword() == null ? "" : properties.getPassword());
+            }
+            return factory;
+        } catch (JMSException e) {
+            throw new MessageOperationException("Error configuring MQ connection factory: " + e.getMessage(), e);
         }
-
-        throw new MessageOperationException("Unable to produce messages to queue " + command.target().queueName(), lastException);
     }
 
-    private MQQueueConnectionFactory connectionFactory(ProduceMessageCommand command, QueueEndpoint endpoint) throws JMSException {
-        MQQueueConnectionFactory factory = new MQQueueConnectionFactory();
-        factory.setTransportType(WMQConstants.WMQ_CM_CLIENT);
-        factory.setHostName(endpoint.host());
-        factory.setPort(endpoint.port());
-        factory.setQueueManager(command.queueManager().name());
-        factory.setChannel(command.queueManager().channel());
-        if (command.queueManager().useTls()) {
-            factory.setSSLCipherSuite(command.queueManager().cipherSuite());
-            factory.setBooleanProperty(WMQConstants.WMQ_SSL_FIPS_REQUIRED, false);
-            factory.setBooleanProperty(WMQConstants.USER_AUTHENTICATION_MQCSP, true);
+    protected JMSContext createContext(MQQueueConnectionFactory factory) {
+        if (StringUtils.hasText(properties.getUsername())) {
+            String password = properties.getPassword() == null ? "" : properties.getPassword();
+            return factory.createContext(properties.getUsername(), password);
         }
-        return factory;
-    }
-
-    private JMSContext createContext(MQQueueConnectionFactory factory, ProduceMessageCommand command) {
-        return command.queueManager().credentials().usernameOptional()
-                .map(username -> factory.createContext(username, command.queueManager().credentials().passwordOptional().orElse("")))
-                .orElseGet(factory::createContext);
+        return factory.createContext();
     }
 
     private void configureProducer(JMSProducer producer, br.com.orleon.mq.probe.domain.model.message.ProductionSettings settings) {
@@ -176,5 +198,14 @@ public class IbmMqMessageProducerAdapter implements MessageProducerPort {
                 metadata,
                 List.of()
         );
+    }
+
+    private void handleConnectionFailure(Exception e) {
+        Throwable cause = e.getCause();
+        if (cause instanceof SocketException) {
+            LOGGER.error("MQ connection reset (possible MQRC 2009). Verify MQ channel, HBINT, TLS, and credentials.", e);
+        } else {
+            LOGGER.error("Error connecting to MQ: {}", e.getMessage(), e);
+        }
     }
 }
