@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -27,10 +28,17 @@ public class DynamoDbConfiguration {
         if (properties.region() != null) {
             builder.region(Region.of(properties.region()));
         }
-        if (properties.endpointOverride() != null && !properties.endpointOverride().isBlank()) {
+        boolean hasEndpointOverride = properties.endpointOverride() != null && !properties.endpointOverride().isBlank();
+        if (hasEndpointOverride) {
             builder.endpointOverride(URI.create(properties.endpointOverride()));
         }
-        AwsCredentialsProvider credentialsProvider = StaticCredentialsProvider.create(AwsBasicCredentials.create("dummy", "dummy"));
+
+        AwsCredentialsProvider credentialsProvider;
+        if (hasEndpointOverride) {
+            credentialsProvider = StaticCredentialsProvider.create(AwsBasicCredentials.create("dummy", "dummy"));
+        } else {
+            credentialsProvider = DefaultCredentialsProvider.create();
+        }
         builder.credentialsProvider(credentialsProvider);
         return builder.build();
     }
