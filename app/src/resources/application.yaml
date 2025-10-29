@@ -18,9 +18,11 @@ management:
     export:
       prometheus:
         enabled: true
-      datadog:
+  datadog:
+    metrics:
+      export:
         enabled: false
-        api-key: ${DATADOG_API_KEY:}
+        api-key: ${DATADOG_API_KEY:disabled}
         uri: https://api.datadoghq.com
   tracing:
     sampling:

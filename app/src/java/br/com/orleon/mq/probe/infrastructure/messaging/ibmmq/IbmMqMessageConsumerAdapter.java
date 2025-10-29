@@ -9,12 +9,12 @@ import br.com.orleon.mq.probe.domain.model.message.ReceivedMessage;
 import br.com.orleon.mq.probe.domain.ports.MessageConsumerPort;
 import com.ibm.mq.jms.MQQueueConnectionFactory;
 import com.ibm.msg.client.wmq.WMQConstants;
-import jakarta.jms.Destination;
-import jakarta.jms.JMSConsumer;
-import jakarta.jms.JMSContext;
-import jakarta.jms.JMSException;
-import jakarta.jms.Message;
-import jakarta.jms.TextMessage;
+import javax.jms.Destination;
+import javax.jms.JMSConsumer;
+import javax.jms.JMSContext;
+import javax.jms.JMSException;
+import javax.jms.Message;
+import javax.jms.TextMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,8 +71,8 @@ public class IbmMqMessageConsumerAdapter implements MessageConsumerPort {
 
     private JMSContext createContext(MQQueueConnectionFactory factory, ConsumeMessageCommand command) {
         int sessionMode = command.settings().autoAcknowledge() ? JMSContext.AUTO_ACKNOWLEDGE : JMSContext.CLIENT_ACKNOWLEDGE;
-        return command.queueManager().credentials().username()
-                .map(username -> factory.createContext(username, command.queueManager().credentials().password().orElse(""), sessionMode))
+        return command.queueManager().credentials().usernameOptional()
+                .map(username -> factory.createContext(username, command.queueManager().credentials().passwordOptional().orElse(""), sessionMode))
                 .orElseGet(() -> factory.createContext(sessionMode));
     }
 
