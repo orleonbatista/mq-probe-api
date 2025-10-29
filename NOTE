@@ -1,0 +1,221 @@
+
+⸻
+
+🧩 Prompt 1 — Criação do TODO.md
+
+Crie um arquivo chamado TODO.md na raiz do projeto mq-probe-api, contendo todo o plano de desenvolvimento por fases, conforme as instruções abaixo:
+
+⸻
+
+Conteúdo do arquivo TODO.md:
+	1.	Título principal:
+
+# 🧭 MQ Probe – Plano de Implementação por Fases
+
+
+	2.	Bloco de regra de uso:
+	•	Explique que a cada fase concluída deve ser marcada com ✅ no título.
+	•	Exemplo:
+
+## ✅ Fase 1 — Núcleo
+
+
+	•	Especifique também que o desenvolvedor deve marcar as checkboxes concluídas e adicionar uma entrada no CHANGELOG com o resumo da entrega.
+
+	3.	Seções de fases:
+	•	Fase 0 — Fundação / Scaffold + DX
+	•	Objetivo: criar o esqueleto da aplicação Java 17 com Spring Boot 3.x seguindo Clean Architecture + SOLID.
+	•	Tarefas: configurar Gradle, dependências, estrutura de pacotes, health endpoints, Swagger, logging JSON e README.
+	•	Fase 1 — Núcleo (Produce / Consume + Idempotência)
+	•	Objetivo: implementar os endpoints POST /messages/produce e POST /messages/consume com idempotência via DynamoDB.
+	•	Incluir o modelo da tabela mq-probe-idempotency, fluxos, adapters (IBM MQ AllClient), ports, usecases e observabilidade.
+	•	Fase 2 — Utilidades (Depth, Connectivity, Status, Config)
+	•	Objetivo: criar endpoints auxiliares (queue/depth, connections/test, status, version, metrics, config).
+	•	Fase 3 — Testes Orquestrados e Operações de Lab
+	•	Objetivo: permitir testes de carga/soak com endpoints /tests, /queue/purge (atrás de feature flag).
+	•	Fase 4 — Segurança (AuthN / AuthZ / Hardening)
+	•	Objetivo: adicionar OAuth2 Resource Server (JWT) e RBAC/ABAC.
+	4.	Checklist (por fase):
+	•	Cada fase deve conter checkboxes [ ] para cada tarefa listada.
+	•	O desenvolvedor marcará [x] ou ✅ conforme as tarefas forem concluídas.
+	5.	Seção final “Regras de Execução e Qualidade”
+	•	Itens fixos:
+	1.	Trabalhar fase por fase.
+	2.	Ao finalizar: marcar título com ✅, ticar checkboxes, e commitar com:
+
+feat(phase): concluída Fase X - <descrição breve>
+
+
+	3.	Swagger deve estar funcional desde a Fase 0.
+	4.	Código sempre seguindo Clean Architecture + SOLID.
+	5.	Sempre usar IBM MQ AllClient.
+	6.	Todos os builds e testes devem estar verdes.
+
+⸻
+
+Instruções adicionais
+	•	O conteúdo deve ser gerado em formato Markdown completo.
+	•	O arquivo final deve ser salvo como TODO.md na raiz do repositório.
+	•	O texto deve estar em português, e usar emojis (✅, ☐) para facilitar visualização.
+	•	Garantir que o arquivo seja legível no GitHub (usar títulos ##, listas e code blocks formatados).
+
+⸻
+
+👉 Resultado esperado:
+Um arquivo TODO.md autoexplicativo, contendo todas as fases do plano do projeto MQ Probe API, com checkboxes, exemplos de commit, e regras para ticar as fases conforme forem implementadas.
+
+⸻
+
+🧩 Prompt 2 — Fase 0 (Fundação / Scaffold + DX)
+
+Crie um projeto Java 17 com Spring Boot 3.x seguindo Clean Architecture + SOLID, separado em camadas api, application, domain, infrastructure. Inclua:
+	•	Dependências Gradle (Kotlin DSL):
+	•	spring-boot-starter-web, spring-boot-starter-validation, spring-boot-starter-actuator
+	•	micrometer-registry-prometheus
+	•	springdoc-openapi-starter-webmvc-ui:2.6.0
+	•	com.ibm.mq:com.ibm.mq.allclient:9.3.5.0, jakarta.jms:jakarta.jms-api:3.1.0
+	•	software.amazon.awssdk:dynamodb:2.25.40
+	•	jackson-databind
+	•	testes: spring-boot-starter-test
+	•	Estrutura de pacotes:
+
+com.acme.mqprobe/
+  api/controller/
+  api/dto/
+  application/usecase/
+  domain/model/
+  domain/ports/
+  domain/policy/
+  infrastructure/mq/
+  infrastructure/ddb/
+  infrastructure/observability/
+  infrastructure/config/
+
+	•	Endpoints apenas health e swagger (por enquanto):
+GET /health/live e GET /health/ready (Actuator), Swagger UI habilitado em /swagger-ui.html.
+	•	Config padronizada:
+	•	application.yaml com server.port=8080, actuator, prometheus.
+	•	Logging JSON básico.
+	•	Entregáveis:
+	1.	build.gradle.kts completo.
+	2.	Classe MqProbeApplication.java (main).
+	3.	Config do SpringDoc/OpenAPI 3.1 habilitado desde já.
+	4.	README com instruções (Gradle bootRun e acesso Swagger/health).
+
+⸻
+
+🧩 Prompt 3 — Fase 1 (Núcleo: Produce / Consume + Idempotência)
+
+Implemente somente dois endpoints com Swagger/OpenAPI 3.1 e idempotência em DynamoDB, usando IBM MQ AllClient (JMS).
+
+Requisitos
+	•	POST /messages/produce → produz lote de mensagens.
+	•	POST /messages/consume → consome/browse lote de mensagens.
+	•	Receber o alvo no body (queueManager, queue, channel, connName, ccdtUrl?, ssl?, auth?).
+	•	produce aceita configurações de batch, payload, MQ props e headers.
+	•	consume aceita maxMessages, waitSeconds, browseOnly, selector, transaction, ack.
+
+Idempotência (DynamoDB)
+	•	Header: Idempotency-Key (UUID) e Idempotency-Expiry-Seconds (opcional).
+	•	Tabela mq-probe-idempotency (PAY_PER_REQUEST, TTL, GSIs).
+	•	Fluxo:
+	1.	Calcula requestHash.
+	2.	PutItem condicional PENDING.
+	3.	Executa operação MQ.
+	4.	Marca SUCCEEDED/FAILED.
+	5.	Replay → devolve cache.
+	6.	Conflito → 409.
+
+Clean Architecture
+	•	Domain: modelos (Target, BatchConfig, PayloadSpec, MqProps, IdempotencyRecord).
+	•	Ports: MessageProducerPort, MessageConsumerPort, IdempotencyRepository.
+	•	Application: ProduceMessagesUseCase, ConsumeMessagesUseCase.
+	•	Infra: JmsMessageProducerAdapter, JmsMessageConsumerAdapter, DynamoIdempotencyRepository.
+
+API
+	•	DTOs ProduceRequest, ConsumeRequest, validados com jakarta.validation.
+	•	MessagesController recebe headers de idempotência.
+	•	OpenAPI 3.1 com exemplos.
+
+Observabilidade
+	•	Micrometer (mq.produce, mq.consume, mq.idem).
+	•	Logs estruturados com traceId, target, requestHash, elapsedMs.
+
+Testes
+	•	Unitários e integração mínima JMS/DynamoDB.
+	•	README com exemplos curl (produce, consume).
+
+⸻
+
+🧩 Prompt 4 — Fase 2 (Utilidades: Depth, Connectivity, Status, Config)
+
+Adicionar endpoints auxiliares (sem auth ainda):
+
+Endpoints
+	•	POST /queue/depth
+	•	POST /connections/test
+	•	GET /status
+	•	GET /version
+	•	GET /metrics
+	•	GET /config / PUT /config
+
+Implementação
+	•	Reutilizar portas/usecases quando possível.
+	•	Criar adapter MQ para obter depth via MQINQ/PCF.
+	•	OpenAPI com exemplos.
+
+Observabilidade
+	•	Métricas e histogramas p50/p95/p99.
+	•	Logs detalhando sucesso/falha em connections/test.
+
+Entregáveis
+	•	Endpoints funcionando.
+	•	Testes unitários.
+	•	README atualizado.
+
+⸻
+
+🧩 Prompt 5 — Fase 3 (Testes Orquestrados e Operações de Lab)
+
+Adicionar jobs de teste e operações laboratoriais, mantendo Clean Architecture.
+
+Endpoints
+	•	POST /tests
+	•	GET /tests/{id}
+	•	POST /tests/{id}/stop
+	•	POST /queue/purge (feature flag)
+
+Implementação
+	•	Criar usecases para orquestrar producers/consumers concorrentes.
+	•	Exportar métricas por job.
+	•	Suportar targetRef (resolved server-side).
+	•	Parada graciosa e rate limit.
+	•	Testes unitários e README com exemplos.
+
+⸻
+
+🧩 Prompt 6 — Fase 4 (Segurança: AuthN / AuthZ / Hardening)
+
+Adicionar OAuth2 JWT + RBAC/ABAC por último.
+
+AuthN
+	•	Implementar OAuth2 Resource Server (JWT via JWKS).
+	•	Alternativa: x-api-key.
+
+AuthZ
+	•	Escopos:
+	•	mq:read → status, metrics, depth
+	•	mq:write → produce, consume
+	•	mq:admin → tests, purge, config
+	•	ABAC opcional via targetRef.
+
+Segurança adicional
+	•	Sanitizar logs.
+	•	Configurar CORS e headers.
+	•	Rate limiting.
+	•	Atualizar OpenAPI (securitySchemes).
+	•	Testes JWT simulados.
+	•	README com instruções.
+
+⸻
+
