@@ -4,20 +4,24 @@ import br.com.orleon.mq.probe.domain.exception.MessageOperationException;
 import br.com.orleon.mq.probe.domain.model.message.ConsumeMessageCommand;
 import br.com.orleon.mq.probe.domain.model.message.MessageOperationResult;
 import br.com.orleon.mq.probe.domain.model.message.MessageOperationType;
-import br.com.orleon.mq.probe.domain.model.message.QueueEndpoint;
 import br.com.orleon.mq.probe.domain.model.message.ReceivedMessage;
 import br.com.orleon.mq.probe.domain.ports.MessageConsumerPort;
+import br.com.orleon.mq.probe.infrastructure.config.MqProperties;
 import com.ibm.mq.jms.MQQueueConnectionFactory;
 import com.ibm.msg.client.wmq.WMQConstants;
+import com.ibm.msg.client.wmq.common.CommonConstants;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.util.StringUtils;
+
 import javax.jms.Destination;
 import javax.jms.JMSConsumer;
 import javax.jms.JMSContext;
 import javax.jms.JMSException;
+import javax.jms.JMSRuntimeException;
 import javax.jms.Message;
 import javax.jms.TextMessage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.net.SocketException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -28,52 +32,70 @@ import java.util.Map;
 public class IbmMqMessageConsumerAdapter implements MessageConsumerPort {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IbmMqMessageConsumerAdapter.class);
+    private static final String TCP_KEEP_ALIVE_PROPERTY = "XMSC_WMQ_TCP_KEEP_ALIVE";
+
+    private final MqProperties properties;
+
+    public IbmMqMessageConsumerAdapter(MqProperties properties) {
+        this.properties = properties;
+    }
 
     @Override
     public MessageOperationResult consume(ConsumeMessageCommand command) {
+        properties.validate();
+
         Instant start = Instant.now();
-        Exception lastException = null;
-
-        for (QueueEndpoint endpoint : command.queueManager().endpoints()) {
-            try {
-                MQQueueConnectionFactory factory = connectionFactory(command, endpoint);
-                try (JMSContext context = createContext(factory, command)) {
-                    Destination destination = context.createQueue("queue:///" + command.target().queueName());
-                    try (JMSConsumer consumer = context.createConsumer(destination)) {
-                        List<ReceivedMessage> messages = receiveMessages(command, consumer);
-                        Instant end = Instant.now();
-                        return buildResult(command, messages, start, end);
-                    }
-                }
-            } catch (Exception ex) {
-                lastException = ex;
-                LOGGER.error("Failed to consume messages using endpoint {}:{} for queue manager {}", endpoint.host(), endpoint.port(), command.queueManager().name(), ex);
-            }
-        }
-
-        throw new MessageOperationException("Unable to consume messages from queue " + command.target().queueName(), lastException);
-    }
-
-    private MQQueueConnectionFactory connectionFactory(ConsumeMessageCommand command, QueueEndpoint endpoint) throws JMSException {
-        MQQueueConnectionFactory factory = new MQQueueConnectionFactory();
-        factory.setTransportType(WMQConstants.WMQ_CM_CLIENT);
-        factory.setHostName(endpoint.host());
-        factory.setPort(endpoint.port());
-        factory.setQueueManager(command.queueManager().name());
-        factory.setChannel(command.queueManager().channel());
-        if (command.queueManager().useTls()) {
-            factory.setSSLCipherSuite(command.queueManager().cipherSuite());
-            factory.setBooleanProperty(WMQConstants.WMQ_SSL_FIPS_REQUIRED, false);
-            factory.setBooleanProperty(WMQConstants.USER_AUTHENTICATION_MQCSP, true);
-        }
-        return factory;
-    }
-
-    private JMSContext createContext(MQQueueConnectionFactory factory, ConsumeMessageCommand command) {
+        MQQueueConnectionFactory factory = createConnectionFactory();
+        LOGGER.debug("Connecting to MQ: host={}, port={}, qm={}, channel={}, tls={}, cipherSuite={}",
+                properties.getHost(), properties.getPort(), properties.getQueueManager(), properties.getChannel(),
+                properties.isUseTLS(), properties.getCipherSuite());
         int sessionMode = command.settings().autoAcknowledge() ? JMSContext.AUTO_ACKNOWLEDGE : JMSContext.CLIENT_ACKNOWLEDGE;
-        return command.queueManager().credentials().usernameOptional()
-                .map(username -> factory.createContext(username, command.queueManager().credentials().passwordOptional().orElse(""), sessionMode))
-                .orElseGet(() -> factory.createContext(sessionMode));
+
+        try (JMSContext context = createContext(factory, sessionMode)) {
+            Destination destination = context.createQueue("queue:///" + command.target().queueName());
+            try (JMSConsumer consumer = context.createConsumer(destination)) {
+                List<ReceivedMessage> messages = receiveMessages(command, consumer);
+                Instant end = Instant.now();
+                return buildResult(command, messages, start, end);
+            }
+        } catch (JMSException | JMSRuntimeException ex) {
+            handleConnectionFailure(ex);
+            throw new MessageOperationException("Error connecting to MQ: " + ex.getMessage(), ex);
+        }
+    }
+
+    protected MQQueueConnectionFactory createConnectionFactory() {
+        try {
+            MQQueueConnectionFactory factory = new MQQueueConnectionFactory();
+            factory.setTransportType(WMQConstants.WMQ_CM_CLIENT);
+            factory.setHostName(properties.getHost());
+            factory.setPort(properties.getPort());
+            factory.setQueueManager(properties.getQueueManager());
+            factory.setChannel(properties.getChannel());
+            factory.setClientReconnectOptions(CommonConstants.WMQ_CLIENT_RECONNECT);
+            factory.setClientReconnectTimeout(30);
+            factory.setBooleanProperty(TCP_KEEP_ALIVE_PROPERTY, true);
+            if (properties.isUseTLS()) {
+                factory.setSSLCipherSuite(properties.getCipherSuite());
+                factory.setBooleanProperty(WMQConstants.USER_AUTHENTICATION_MQCSP, true);
+            }
+            if (StringUtils.hasText(properties.getUsername())) {
+                factory.setStringProperty(WMQConstants.USERID, properties.getUsername());
+                factory.setStringProperty(WMQConstants.PASSWORD,
+                        properties.getPassword() == null ? "" : properties.getPassword());
+            }
+            return factory;
+        } catch (JMSException e) {
+            throw new MessageOperationException("Error configuring MQ connection factory: " + e.getMessage(), e);
+        }
+    }
+
+    protected JMSContext createContext(MQQueueConnectionFactory factory, int sessionMode) {
+        if (StringUtils.hasText(properties.getUsername())) {
+            String password = properties.getPassword() == null ? "" : properties.getPassword();
+            return factory.createContext(properties.getUsername(), password, sessionMode);
+        }
+        return factory.createContext(sessionMode);
     }
 
     private List<ReceivedMessage> receiveMessages(ConsumeMessageCommand command, JMSConsumer consumer) throws JMSException {
@@ -133,5 +155,14 @@ public class IbmMqMessageConsumerAdapter implements MessageConsumerPort {
                 metadata,
                 List.copyOf(messages)
         );
+    }
+
+    private void handleConnectionFailure(Exception e) {
+        Throwable cause = e.getCause();
+        if (cause instanceof SocketException) {
+            LOGGER.error("MQ connection reset (possible MQRC 2009). Verify MQ channel, HBINT, TLS, and credentials.", e);
+        } else {
+            LOGGER.error("Error connecting to MQ: {}", e.getMessage(), e);
+        }
     }
 }

@@ -12,18 +12,20 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @Configuration
+@EnableConfigurationProperties(MqProperties.class)
 public class MessagingConfiguration {
 
     @Bean
-    public MessageProducerPort messageProducerPort() {
-        return new IbmMqMessageProducerAdapter();
+    public MessageProducerPort messageProducerPort(MqProperties mqProperties) {
+        return new IbmMqMessageProducerAdapter(mqProperties);
     }
 
     @Bean
-    public MessageConsumerPort messageConsumerPort() {
-        return new IbmMqMessageConsumerAdapter();
+    public MessageConsumerPort messageConsumerPort(MqProperties mqProperties) {
+        return new IbmMqMessageConsumerAdapter(mqProperties);
     }
 
     @Bean

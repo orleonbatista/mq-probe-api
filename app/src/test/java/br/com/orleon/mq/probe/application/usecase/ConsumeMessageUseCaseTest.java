@@ -39,7 +39,7 @@ class ConsumeMessageUseCaseTest {
 
     private final MessageConsumerPort consumerPort = mock(MessageConsumerPort.class);
     private final IdempotencyService idempotencyService = mock(IdempotencyService.class);
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final ObservationRegistry observationRegistry = ObservationRegistry.create();
     private ConsumeMessageUseCase useCase;
