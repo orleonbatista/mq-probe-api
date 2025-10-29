@@ -16,14 +16,14 @@
 - ✅ Habilitar logging em formato JSON.
 - ✅ Atualizar README com instruções básicas de execução e desenvolvimento.
 
-## ☐ Fase 1 — Núcleo (Produce / Consume + Idempotência)
+## ✅ Fase 1 — Núcleo (Produce / Consume + Idempotência)
 **Objetivo:** Implementar os endpoints `POST /messages/produce` e `POST /messages/consume` com idempotência via DynamoDB.
 
-- ☐ Modelar a tabela `mq-probe-idempotency` no DynamoDB.
-- ☐ Implementar fluxos de produção e consumo com idempotência.
-- ☐ Criar adapters utilizando IBM MQ AllClient.
-- ☐ Definir ports e use cases segundo Clean Architecture.
-- ☐ Adicionar observabilidade (logs, métricas, tracing) aos fluxos principais.
+- ✅ Modelar a tabela `mq-probe-idempotency` no DynamoDB.
+- ✅ Implementar fluxos de produção e consumo com idempotência.
+- ✅ Criar adapters utilizando IBM MQ AllClient.
+- ✅ Definir ports e use cases segundo Clean Architecture.
+- ✅ Adicionar observabilidade (logs, métricas, tracing) aos fluxos principais.
 
 ## ☐ Fase 2 — Utilidades (Depth, Connectivity, Status, Config)
 **Objetivo:** Criar endpoints auxiliares (`/queue/depth`, `/connections/test`, `/status`, `/version`, `/metrics`, `/config`).
