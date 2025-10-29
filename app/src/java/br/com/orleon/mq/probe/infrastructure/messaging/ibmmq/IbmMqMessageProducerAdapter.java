@@ -9,14 +9,14 @@ import br.com.orleon.mq.probe.domain.model.message.QueueEndpoint;
 import br.com.orleon.mq.probe.domain.ports.MessageProducerPort;
 import com.ibm.mq.jms.MQQueueConnectionFactory;
 import com.ibm.msg.client.wmq.WMQConstants;
-import jakarta.jms.BytesMessage;
-import jakarta.jms.DeliveryMode;
-import jakarta.jms.Destination;
-import jakarta.jms.JMSContext;
-import jakarta.jms.JMSException;
-import jakarta.jms.JMSProducer;
-import jakarta.jms.Message;
-import jakarta.jms.TextMessage;
+import javax.jms.BytesMessage;
+import javax.jms.DeliveryMode;
+import javax.jms.Destination;
+import javax.jms.JMSContext;
+import javax.jms.JMSException;
+import javax.jms.JMSProducer;
+import javax.jms.Message;
+import javax.jms.TextMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,8 +74,8 @@ public class IbmMqMessageProducerAdapter implements MessageProducerPort {
     }
 
     private JMSContext createContext(MQQueueConnectionFactory factory, ProduceMessageCommand command) {
-        return command.queueManager().credentials().username()
-                .map(username -> factory.createContext(username, command.queueManager().credentials().password().orElse("")))
+        return command.queueManager().credentials().usernameOptional()
+                .map(username -> factory.createContext(username, command.queueManager().credentials().passwordOptional().orElse("")))
                 .orElseGet(factory::createContext);
     }
 
@@ -103,7 +103,7 @@ public class IbmMqMessageProducerAdapter implements MessageProducerPort {
         for (int i = 0; i < total; i++) {
             MessagePayload payload = payloads.get(i % payloads.size());
             Message message = createMessage(context, payload);
-            command.target().replyToQueue().ifPresent(reply -> {
+            command.target().replyToQueueOptional().ifPresent(reply -> {
                 try {
                     message.setJMSReplyTo(context.createQueue("queue:///" + reply));
                 } catch (JMSException e) {

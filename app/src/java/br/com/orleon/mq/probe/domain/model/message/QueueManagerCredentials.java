@@ -7,11 +7,11 @@ public record QueueManagerCredentials(
         String password
 ) {
 
-    public Optional<String> username() {
+    public Optional<String> usernameOptional() {
         return Optional.ofNullable(username);
     }
 
-    public Optional<String> password() {
+    public Optional<String> passwordOptional() {
         return Optional.ofNullable(password);
     }
 }
