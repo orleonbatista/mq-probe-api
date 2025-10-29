@@ -1,0 +1,14 @@
+<configuration scan="true" scanPeriod="60 seconds">
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="mq-probe-api"/>
+
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeCallerData>false</includeCallerData>
+            <customFields>{"app_name":"${APP_NAME}"}</customFields>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </root>
+</configuration>
