@@ -64,19 +64,17 @@ public class ProduceMessageUseCase {
                 .lowCardinalityKeyValue("queueManager", command.queueManager().name());
         Timer.Sample sample = Timer.start(meterRegistry);
 
-        LOGGER.debug("Producing message to queue={} with id={}", command.target().queueName(), command.idempotencyKey());
-
         try (Observation.Scope scope = observation.openScope()) {
             MessageOperationResult result = producerPort.produce(command);
             observation.highCardinalityKeyValue("messages.processed", String.valueOf(result.processedMessages()));
-            sample.stop(meterRegistry.timer("produce.message.time", "status", "success"));
-            LOGGER.debug("Finished producing message to queue={} with id={}", command.target().queueName(), command.idempotencyKey());
+            sample.stop(meterRegistry.timer("mq.probe.messages.produced",
+                    "queue", command.target().queueName(),
+                    "queueManager", command.queueManager().name()));
             idempotencyService.markCompleted(MessageOperationType.PRODUCE,
                     command.idempotencyKey(), serialize(result));
             return result;
         } catch (RuntimeException ex) {
             observation.error(ex);
-            sample.stop(meterRegistry.timer("produce.message.time", "status", "failure"));
             idempotencyService.markFailed(MessageOperationType.PRODUCE,
                     command.idempotencyKey(), IdempotencyStatus.FAILED);
             throw ex;
