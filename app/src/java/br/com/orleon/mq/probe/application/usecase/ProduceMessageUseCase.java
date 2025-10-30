@@ -12,8 +12,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import io.micrometer.observation.Observation;
-import io.micrometer.observation.ObservationRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,18 +26,15 @@ public class ProduceMessageUseCase {
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
-    private final ObservationRegistry observationRegistry;
 
     public ProduceMessageUseCase(MessageProducerPort producerPort,
                                  IdempotencyService idempotencyService,
                                  ObjectMapper objectMapper,
-                                 MeterRegistry meterRegistry,
-                                 ObservationRegistry observationRegistry) {
+                                 MeterRegistry meterRegistry) {
         this.producerPort = producerPort;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
-        this.observationRegistry = observationRegistry;
     }
 
     public MessageOperationResult execute(ProduceMessageCommand command) {
@@ -58,28 +53,21 @@ public class ProduceMessageUseCase {
 
         idempotencyService.acquireLock(MessageOperationType.PRODUCE, command.idempotencyKey(), serializedCommand, ttlOverride);
 
-        Observation observation = Observation.createNotStarted("messages.produce", observationRegistry)
-                .contextualName("produce-messages")
-                .lowCardinalityKeyValue("queue", command.target().queueName())
-                .lowCardinalityKeyValue("queueManager", command.queueManager().name());
         Timer.Sample sample = Timer.start(meterRegistry);
 
-        try (Observation.Scope scope = observation.openScope()) {
+        LOGGER.debug("Producing message to queue={} with id={}", command.target().queueName(), command.idempotencyKey());
+        try {
             MessageOperationResult result = producerPort.produce(command);
-            observation.highCardinalityKeyValue("messages.processed", String.valueOf(result.processedMessages()));
-            sample.stop(meterRegistry.timer("mq.probe.messages.produced",
-                    "queue", command.target().queueName(),
-                    "queueManager", command.queueManager().name()));
+            sample.stop(meterRegistry.timer("produce.message.time", "status", "success"));
+            LOGGER.debug("Finished producing message to queue={} with id={}", command.target().queueName(), command.idempotencyKey());
             idempotencyService.markCompleted(MessageOperationType.PRODUCE,
                     command.idempotencyKey(), serialize(result));
             return result;
         } catch (RuntimeException ex) {
-            observation.error(ex);
+            sample.stop(meterRegistry.timer("produce.message.time", "status", "failure"));
             idempotencyService.markFailed(MessageOperationType.PRODUCE,
                     command.idempotencyKey(), IdempotencyStatus.FAILED);
             throw ex;
-        } finally {
-            observation.stop();
         }
     }
 

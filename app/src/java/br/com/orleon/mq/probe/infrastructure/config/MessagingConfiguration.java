@@ -10,29 +10,30 @@ import br.com.orleon.mq.probe.infrastructure.messaging.ibmmq.IbmMqMessageProduce
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
+@EnableConfigurationProperties(MqProperties.class)
 public class MessagingConfiguration {
 
     @Bean
-    public MessageProducerPort messageProducerPort() {
-        return new IbmMqMessageProducerAdapter();
+    public MessageProducerPort messageProducerPort(MqProperties mqProperties) {
+        return new IbmMqMessageProducerAdapter(mqProperties);
     }
 
     @Bean
-    public MessageConsumerPort messageConsumerPort() {
-        return new IbmMqMessageConsumerAdapter();
+    public MessageConsumerPort messageConsumerPort(MqProperties mqProperties) {
+        return new IbmMqMessageConsumerAdapter(mqProperties);
     }
 
     @Bean
     public ProduceMessageUseCase produceMessageUseCase(MessageProducerPort producerPort,
                                                        IdempotencyService idempotencyService,
                                                        ObjectMapper objectMapper,
-                                                       MeterRegistry meterRegistry,
-                                                       ObservationRegistry observationRegistry) {
-        return new ProduceMessageUseCase(producerPort, idempotencyService, objectMapper, meterRegistry, observationRegistry);
+                                                       MeterRegistry meterRegistry) {
+        return new ProduceMessageUseCase(producerPort, idempotencyService, objectMapper, meterRegistry);
     }
 
     @Bean

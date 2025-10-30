@@ -46,6 +46,8 @@ class ConsumeMessageUseCaseTest {
 
     @BeforeEach
     void setup() {
+        objectMapper.findAndRegisterModules();
+        meterRegistry.clear();
         useCase = new ConsumeMessageUseCase(consumerPort, idempotencyService, objectMapper, meterRegistry, observationRegistry);
     }
 
