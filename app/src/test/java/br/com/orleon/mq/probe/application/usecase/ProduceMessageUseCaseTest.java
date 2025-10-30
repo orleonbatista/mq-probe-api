@@ -25,7 +25,6 @@ import br.com.orleon.mq.probe.domain.model.message.QueueTarget;
 import br.com.orleon.mq.probe.domain.ports.MessageProducerPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -41,12 +40,13 @@ class ProduceMessageUseCaseTest {
     private final IdempotencyService idempotencyService = mock(IdempotencyService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final ObservationRegistry observationRegistry = ObservationRegistry.create();
     private ProduceMessageUseCase useCase;
 
     @BeforeEach
     void setup() {
-        useCase = new ProduceMessageUseCase(producerPort, idempotencyService, objectMapper, meterRegistry, observationRegistry);
+        objectMapper.findAndRegisterModules();
+        meterRegistry.clear();
+        useCase = new ProduceMessageUseCase(producerPort, idempotencyService, objectMapper, meterRegistry);
     }
 
     @Test
@@ -65,6 +65,9 @@ class ProduceMessageUseCaseTest {
         verify(idempotencyService).markCompleted(eq(MessageOperationType.PRODUCE), eq(command.idempotencyKey()), responseCaptor.capture());
         assertThat(requestCaptor.getValue()).contains(command.target().queueName());
         assertThat(responseCaptor.getValue()).contains("processedMessages");
+        assertThat(meterRegistry.find("produce.message.time").tag("status", "success").timer())
+                .isNotNull()
+                .satisfies(timer -> assertThat(timer.count()).isEqualTo(1));
     }
 
     @Test
@@ -99,6 +102,9 @@ class ProduceMessageUseCaseTest {
 
         assertThatThrownBy(() -> useCase.execute(command)).isInstanceOf(MessageOperationException.class);
         verify(idempotencyService).markFailed(MessageOperationType.PRODUCE, command.idempotencyKey(), IdempotencyStatus.FAILED);
+        assertThat(meterRegistry.find("produce.message.time").tag("status", "failure").timer())
+                .isNotNull()
+                .satisfies(timer -> assertThat(timer.count()).isEqualTo(1));
     }
 
     private ProduceMessageCommand command() {

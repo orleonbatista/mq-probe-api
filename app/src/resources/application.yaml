@@ -36,6 +36,13 @@ logging:
   level:
     root: INFO
 
+mq:
+  host: localhost
+  port: 1414
+  queue-manager: DEVQM1
+  channel: DEV.APP.SVRCONN
+  use-tls: false
+
 mqprobe:
   idempotency:
     table-name: mq-probe-idempotency
